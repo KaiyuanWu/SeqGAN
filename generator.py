@@ -1,11 +1,11 @@
 import tensorflow as tf
 from tensorflow.python.ops import tensor_array_ops, control_flow_ops
-
+from text_embedding import bilstm_embedding
 
 class Generator(object):
     def __init__(self, num_emb, batch_size, emb_dim, hidden_dim,
                  sequence_length, start_token,
-                 learning_rate=0.01, reward_gamma=0.95):
+                 learning_rate=0.01, reward_gamma=0.95, wvs=None):
         self.num_emb = num_emb
         self.batch_size = batch_size
         self.emb_dim = emb_dim
@@ -36,8 +36,11 @@ class Generator(object):
             self.processed_x = tf.transpose(tf.nn.embedding_lookup(self.g_embeddings, self.x), perm=[1, 0, 2])  # seq_length x batch_size x emb_dim
 
         # Initial states
-        self.h0 = tf.zeros([self.batch_size, self.hidden_dim])
-        self.h0 = tf.stack([self.h0, self.h0])
+        # self.h0 = tf.zeros([self.batch_size, self.hidden_dim])
+        # self.h0 = tf.stack([self.h0, self.h0])
+
+        # introduce condition to generator
+        self.h0 = bilstm_embedding(self.x, wvs=wvs)
 
         gen_o = tensor_array_ops.TensorArray(dtype=tf.float32, size=self.sequence_length,
                                              dynamic_size=False, infer_shape=True)
@@ -117,8 +120,8 @@ class Generator(object):
         self.g_grad, _ = tf.clip_by_global_norm(tf.gradients(self.g_loss, self.g_params), self.grad_clip)
         self.g_updates = g_opt.apply_gradients(zip(self.g_grad, self.g_params))
 
-    def generate(self, sess):
-        outputs = sess.run(self.gen_x)
+    def generate(self, sess, x_val):
+        outputs = sess.run(self.gen_x, feed_dict={self.x: x_val})
         return outputs
 
     def pretrain_step(self, sess, x):
@@ -202,7 +205,6 @@ class Generator(object):
             logits = tf.matmul(hidden_state, self.Wo) + self.bo
             # output = tf.nn.softmax(logits)
             return logits
-
         return unit
 
     def g_optimizer(self, *args, **kwargs):

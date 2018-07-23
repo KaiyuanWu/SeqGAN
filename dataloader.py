@@ -26,6 +26,11 @@ class Gen_Data_loader():
         self.pointer = (self.pointer + 1) % self.num_batch
         return ret
 
+    def random_batch(self):
+        index = np.random.randint(0, self.num_batch)
+        ret = self.sequence_batch[index]
+        return ret
+
     def reset_pointer(self):
         self.pointer = 0
 
