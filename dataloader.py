@@ -2,9 +2,10 @@ import numpy as np
 
 
 class Gen_Data_loader():
-    def __init__(self, batch_size):
+    def __init__(self, batch_size, seq_len=20):
         self.batch_size = batch_size
         self.token_stream = []
+        self.seq_len = seq_len
 
     def create_batches(self, data_file):
         self.token_stream = []
@@ -13,7 +14,11 @@ class Gen_Data_loader():
                 line = line.strip()
                 line = line.split()
                 parse_line = [int(x) for x in line]
-                if len(parse_line) == 20:
+                if len(parse_line) < self.seq_len:
+                    parse_line.append(0)
+                else:
+                    parse_line = parse_line[:self.seq_len]
+                if len(parse_line) == self.seq_len:
                     self.token_stream.append(parse_line)
 
         self.num_batch = int(len(self.token_stream) / self.batch_size)
@@ -36,10 +41,11 @@ class Gen_Data_loader():
 
 
 class Dis_dataloader():
-    def __init__(self, batch_size):
+    def __init__(self, batch_size, seq_len=20):
         self.batch_size = batch_size
         self.sentences = np.array([])
         self.labels = np.array([])
+        self.seq_len = seq_len
 
     def load_train_data(self, positive_file, negative_file):
         # Load data
@@ -51,12 +57,12 @@ class Dis_dataloader():
                 line = line.split()
                 parse_line = [int(x) for x in line]
                 positive_examples.append(parse_line)
-        with open(negative_file)as fin:
+        with open(negative_file) as fin:
             for line in fin:
                 line = line.strip()
                 line = line.split()
                 parse_line = [int(x) for x in line]
-                if len(parse_line) == 20:
+                if len(parse_line) == self.seq_len:
                     negative_examples.append(parse_line)
         self.sentences = np.array(positive_examples + negative_examples)
 

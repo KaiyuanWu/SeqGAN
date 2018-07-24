@@ -5,7 +5,7 @@ from text_embedding import bilstm_embedding
 class Generator(object):
     def __init__(self, num_emb, batch_size, emb_dim, hidden_dim,
                  sequence_length, start_token,
-                 learning_rate=0.01, reward_gamma=0.95, wvs=None):
+                 learning_rate=0.01, reward_gamma=0.95, wvs=None, with_cond = False):
         self.num_emb = num_emb
         self.batch_size = batch_size
         self.emb_dim = emb_dim
@@ -20,6 +20,7 @@ class Generator(object):
         self.grad_clip = 5.0
 
         self.expected_reward = tf.Variable(tf.zeros([self.sequence_length]))
+        self.with_cond = with_cond
 
         with tf.variable_scope('generator'):
             self.g_embeddings = tf.Variable(self.init_matrix([self.num_emb, self.emb_dim]))
@@ -36,11 +37,12 @@ class Generator(object):
             self.processed_x = tf.transpose(tf.nn.embedding_lookup(self.g_embeddings, self.x), perm=[1, 0, 2])  # seq_length x batch_size x emb_dim
 
         # Initial states
-        # self.h0 = tf.zeros([self.batch_size, self.hidden_dim])
-        # self.h0 = tf.stack([self.h0, self.h0])
-
-        # introduce condition to generator
-        self.h0 = bilstm_embedding(self.x, wvs=wvs)
+        if with_cond:
+            # introduce condition to generator
+            self.h0 = bilstm_embedding(self.x, wvs=wvs)
+        else:
+            self.h0 = tf.zeros([self.batch_size, self.hidden_dim])
+            self.h0 = tf.stack([self.h0, self.h0])
 
         gen_o = tensor_array_ops.TensorArray(dtype=tf.float32, size=self.sequence_length,
                                              dynamic_size=False, infer_shape=True)
@@ -120,8 +122,11 @@ class Generator(object):
         self.g_grad, _ = tf.clip_by_global_norm(tf.gradients(self.g_loss, self.g_params), self.grad_clip)
         self.g_updates = g_opt.apply_gradients(zip(self.g_grad, self.g_params))
 
-    def generate(self, sess, x_val):
-        outputs = sess.run(self.gen_x, feed_dict={self.x: x_val})
+    def generate(self, sess, x_val=None):
+        if self.with_cond:
+            outputs = sess.run(self.gen_x, feed_dict={self.x: x_val})
+        else:
+            outputs = sess.run(self.gen_x)
         return outputs
 
     def pretrain_step(self, sess, x):

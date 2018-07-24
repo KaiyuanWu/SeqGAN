@@ -1,2 +1,3 @@
 .idea/
-scripts/.ipynb_checkpoints/
+script/.ipynb_checkpoints/
+script/work/*

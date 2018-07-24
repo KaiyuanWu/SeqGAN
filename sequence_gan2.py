@@ -5,6 +5,9 @@ from dataloader import Gen_Data_loader, Dis_dataloader
 from generator import Generator
 from discriminator import Discriminator
 from rollout import ROLLOUT
+from target_lstm import TARGET_LSTM
+import utils
+import cPickle
 
 #########################################################################################
 #  Generator  Hyper-parameters
@@ -13,7 +16,7 @@ EMB_DIM = 64 # embedding dimension
 HIDDEN_DIM = 64 # hidden state dimension of lstm cell
 SEQ_LENGTH = 42 # sequence length
 START_TOKEN = 0
-PRE_EPOCH_NUM = 120 # supervise (maximum likelihood estimation) epochs
+PRE_EPOCH_NUM = 100 # supervise (maximum likelihood estimation) epochs
 SEED = 88
 BATCH_SIZE = 64
 
@@ -30,54 +33,14 @@ dis_batch_size = 64
 #########################################################################################
 #  Basic Training Parameters
 #########################################################################################
-TOTAL_BATCH = 2000
-positive_file = 'work/real_data.txt'
-negative_file = 'work/generator_sample.txt'
-test_file = 'work/test_data.txt'
-test_demo_file = 'work/test_demo.txt'
-vacab_file = 'vocab.txt'
+TOTAL_BATCH = 20000
+positive_file = 'script/work/doc_idx_feq_gt1.txt'
+negative_file = 'script/work/generator_sample.txt'
+eval_file = 'script/work/eval_file.txt'
+vacab_file = 'script/work/vocab_feq_gt1.txt'
 generated_num = 10000
 
-def generate_samples(sess, trainable_model, data_loader, generated_num, output_file):
-    batch_size = data_loader.batch_size
-    # Generate Samples
-    generated_samples = []
-    for _ in range(int(generated_num / batch_size)):
-        generated_samples.extend(trainable_model.generate(sess, data_loader.random_batch()))
-
-    with open(output_file, 'w') as fout:
-        for poem in generated_samples:
-            buffer = ' '.join([str(x) for x in poem]) + '\n'
-            fout.write(buffer)
-
-def target_loss(sess, target_lstm, data_loader):
-    # target_loss means the oracle negative log-likelihood tested with the oracle model "target_lstm"
-    # For more details, please see the Section 4 in https://arxiv.org/abs/1609.05473
-    nll = []
-    data_loader.reset_pointer()
-
-    for it in xrange(data_loader.num_batch):
-        batch = data_loader.next_batch()
-        g_loss = sess.run(target_lstm.pretrain_loss, {target_lstm.x: batch})
-        nll.append(g_loss)
-
-    return np.mean(nll)
-
-
-
-
-def test_demo(sess, trainable_model, generated_num, batch_size, output_file, vocab, iter):
-    # Generate Samples
-    generated_samples = []
-    for _ in range(int(generated_num / batch_size)):
-        generated_samples.extend(trainable_model.generate(sess))
-
-    with open(output_file, 'a') as fout:
-        fout.write("==================  iter: {}  ==================\n".format(iter))
-        for poem in generated_samples:
-            buffer = ' '.join([vocab.get(x, '_') for x in poem]) + '\n'
-            fout.write(buffer)
-
+vocab_size = 9631
 
 def pre_train_epoch(sess, trainable_model, data_loader):
     # Pre-train the generator using MLE for one epoch
@@ -96,13 +59,14 @@ def main():
     random.seed(SEED)
     np.random.seed(SEED)
     assert START_TOKEN == 0
+    vocab_w2idx, vocab_idx2w, len_vocab_w2idx = utils.load_vocab(vacab_file)
 
-    gen_data_loader = Gen_Data_loader(BATCH_SIZE)
-    dis_data_loader = Dis_dataloader(BATCH_SIZE)
+    gen_data_loader = Gen_Data_loader(BATCH_SIZE, seq_len=SEQ_LENGTH)
+    dis_data_loader = Dis_dataloader(BATCH_SIZE, seq_len=SEQ_LENGTH)
 
-    vocab_w2idx, vocab_idx2w, vocab_size = load_vocab()
     generator = Generator(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN)
-    discriminator = Discriminator(sequence_length=20, num_classes=2, vocab_size=vocab_size, embedding_size=dis_embedding_dim,
+
+    discriminator = Discriminator(sequence_length=SEQ_LENGTH, num_classes=2, vocab_size=vocab_size, embedding_size=dis_embedding_dim,
                                 filter_sizes=dis_filter_sizes, num_filters=dis_num_filters, l2_reg_lambda=dis_l2_reg_lambda)
 
     config = tf.ConfigProto()
@@ -111,20 +75,21 @@ def main():
     sess.run(tf.global_variables_initializer())
 
     gen_data_loader.create_batches(positive_file)
+    print("gen_data_loader num_batches: ", gen_data_loader.num_batch)
 
-    log = open('save/experiment-log.txt', 'w')
+
     #  pre-train generator
     print 'Start pre-training...'
-    log.write('pre-training...\n')
     for epoch in xrange(PRE_EPOCH_NUM):
         loss = pre_train_epoch(sess, generator, gen_data_loader)
-        if epoch % 5 == 0:
-            test_demo(sess, generator, generated_num = 1, batch_size=32, output_file = test_demo_file, vocab = vocab_idx2w, iter=epoch)
+        if epoch % 1 == 0:
+            utils.test_demo(sess, generator, 8, 8, eval_file, vocab_idx2w, epoch)
+            print 'pre-train epoch ', epoch, 'train_loss ', loss
 
     print 'Start pre-training discriminator...'
     # Train 3 epoch on the generated data and do this for 50 times
-    for _ in range(50):
-        generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
+    for _ in range(10):
+        utils.generate_samples(sess, generator,  64, generated_num, negative_file)
         dis_data_loader.load_train_data(positive_file, negative_file)
         for _ in range(3):
             dis_data_loader.reset_pointer()
@@ -141,7 +106,6 @@ def main():
 
     print '#########################################################################'
     print 'Start Adversarial Training...'
-    log.write('adversarial training...\n')
     for total_batch in range(TOTAL_BATCH):
         # Train the generator for one step
         for it in range(1):
@@ -152,15 +116,13 @@ def main():
 
         # Test
         if total_batch % 5 == 0 or total_batch == TOTAL_BATCH - 1:
-            test_demo(sess, generator, generated_num=1, batch_size=32, output_file=test_demo_file, vocab=vocab_idx2w,
-                      iter=total_batch)
-
+            print 'adversarial-train epoch ', total_batch
+            utils.test_demo(sess, generator, 8, 8, eval_file, vocab_idx2w, total_batch)
         # Update roll-out parameters
         rollout.update_params()
 
         # Train the discriminator
         for _ in range(5):
-            generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
             dis_data_loader.load_train_data(positive_file, negative_file)
 
             for _ in range(3):
@@ -174,7 +136,6 @@ def main():
                     }
                     _ = sess.run(discriminator.train_op, feed)
 
-    log.close()
 
 if __name__ == '__main__':
     main()
