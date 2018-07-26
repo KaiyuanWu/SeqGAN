@@ -8,15 +8,16 @@ from rollout import ROLLOUT
 from target_lstm import TARGET_LSTM
 import utils
 import cPickle
+import pdb
 
 #########################################################################################
 #  Generator  Hyper-parameters
 ######################################################################################
-EMB_DIM = 64 # embedding dimension
-HIDDEN_DIM = 64 # hidden state dimension of lstm cell
+EMB_DIM = 256 # embedding dimension
+HIDDEN_DIM = 256 # hidden state dimension of lstm cell
 SEQ_LENGTH = 42 # sequence length
 START_TOKEN = 0
-PRE_EPOCH_NUM = 100 # supervise (maximum likelihood estimation) epochs
+PRE_EPOCH_NUM = 20 # supervise (maximum likelihood estimation) epochs
 SEED = 88
 BATCH_SIZE = 64
 
@@ -38,7 +39,7 @@ positive_file = 'script/work/doc_idx_feq_gt1.txt'
 negative_file = 'script/work/generator_sample.txt'
 eval_file = 'script/work/eval_file.txt'
 vacab_file = 'script/work/vocab_feq_gt1.txt'
-generated_num = 10000
+generated_num = 200000
 
 vocab_size = 9631
 
@@ -83,7 +84,7 @@ def main():
     for epoch in xrange(PRE_EPOCH_NUM):
         loss = pre_train_epoch(sess, generator, gen_data_loader)
         if epoch % 1 == 0:
-            utils.test_demo(sess, generator, 8, 8, eval_file, vocab_idx2w, epoch)
+            utils.test_demo(sess, generator, 32, 32, eval_file, vocab_idx2w, epoch)
             print 'pre-train epoch ', epoch, 'train_loss ', loss
 
     print 'Start pre-training discriminator...'

@@ -15,7 +15,7 @@ class Gen_Data_loader():
                 line = line.split()
                 parse_line = [int(x) for x in line]
                 if len(parse_line) < self.seq_len:
-                    parse_line.append(0)
+                    parse_line += [0]*(self.seq_len - len(parse_line))
                 else:
                     parse_line = parse_line[:self.seq_len]
                 if len(parse_line) == self.seq_len:
@@ -56,14 +56,21 @@ class Dis_dataloader():
                 line = line.strip()
                 line = line.split()
                 parse_line = [int(x) for x in line]
+                if len(parse_line) < self.seq_len:
+                    parse_line += [0] * (self.seq_len - len(parse_line))
+                else:
+                    parse_line = parse_line[:self.seq_len]
                 positive_examples.append(parse_line)
         with open(negative_file) as fin:
             for line in fin:
                 line = line.strip()
                 line = line.split()
                 parse_line = [int(x) for x in line]
-                if len(parse_line) == self.seq_len:
-                    negative_examples.append(parse_line)
+                if len(parse_line) < self.seq_len:
+                    parse_line.append(0)
+                else:
+                    parse_line = parse_line[:self.seq_len]
+                negative_examples.append(parse_line)
         self.sentences = np.array(positive_examples + negative_examples)
 
         # Generate labels
